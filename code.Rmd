@@ -1,0 +1,243 @@
+---
+title: "Project"
+author: "Junhao Yu"
+date: "2023-01-11"
+output: pdf_document
+---
+
+# Data Prepare
+
+```{r}
+library("ggplot2")
+
+data = load("./OK/OK.Rdata")
+data <- eval(parse(text = data))
+data$gender = rep(0, length(data$Y))
+data$year = rep(0, length(data$Y))
+data$delta = data$Y - data$s_hsgrade3
+data$strata = rep(0, length(data$Y))
+data$seq = 1: length(data$Y)
+data[data$s_group == "M_0" | data$s_group == "M_1", ]$gender = 1
+data[data$s_group == "F_1" | data$s_group == "M_1", ]$year = 1
+data[data$s_group == "F_1", ]$strata = 1
+data[data$s_group == "M_0", ]$strata = 2
+data[data$s_group == "M_1", ]$strata = 3
+summary(data)
+```
+# CRE
+## Random Check
+```{r}
+t_data = data[data$Z == 1, ]
+c_data = data[data$Z == 0, ]
+summary(t_data)
+summary(c_data)
+```
+
+```{r}
+ggplot(data = t_data, aes(x = s_hsgrade3)) + geom_density()
+ggplot(data = c_data, aes(x = s_hsgrade3)) + geom_density()
+```
+
+## Fisher's Exact p-value
+
+```{r}
+set.seed(42)
+y_t = data[data$Z == 1, ]$Y
+y_c = data[data$Z == 0, ]$Y
+y_pool = data$Y
+t_obs = abs(mean(y_t) - mean(y_c))
+count = 0
+for(i in 1:3000)
+{
+  y_t_sample = sample(y_pool, length(y_t))
+  t_sample = abs(mean(y_t_sample) - (sum(y_pool) - sum(y_t_sample)) / length(y_c))
+  if(t_sample > t_obs)
+  {
+    count = count + 1
+  }
+}
+print(count/3000)
+```
+
+## Neyman
+
+```{r}
+ate_hat = mean(y_t) - mean(y_c)
+var_hat = var(y_t)/length(y_t) + var(y_c)/length(y_c)
+print(ate_hat)
+print(sqrt(var_hat))
+print(qnorm(0.975))
+```
+
+## Regression
+```{r}
+reg_cre1 = lm(Y ~ Z + s_hsgrade3 + s_mtongue_english + gender + year, data = data)
+summary(reg_cre1)
+```
+
+## Bayesian
+### Check the Balance of Variable delta
+```{r}
+delta_c = data[data$Z == 0, ]$delta
+delta_t = data[data$Z == 1, ]$delta
+length(y_c)
+length(y_t)
+mean(delta_c)
+mean(delta_t)
+var(delta_c)
+var(delta_t)
+```
+
+```{r}
+set.seed(42)
+mu_std = 15
+y_t_std = 9
+y_c_std = 8
+t_bay = rep(0, 1000)
+for(i in 1:1000){
+  mu_t = rnorm(1, 0, mu_std)
+  mu_c = rnorm(1, 0, mu_std)
+  sample_bay = data[sample(nrow(data), 20), ]
+  for(j in 1:20){
+    if(as.numeric(sample_bay[j, "Z"]) == 1){
+      t_bay[i] = t_bay[i] + (as.numeric(sample_bay[j, "Y"]) - rnorm(1, mu_c, y_c_std))
+    }else{
+      t_bay[i] = t_bay[i] + (rnorm(1, mu_t, y_t_std) - as.numeric(sample_bay[j, "Y"]))
+    }
+  }
+  t_bay[i] = t_bay[i] / 20
+}
+ate_bay = mean(t_bay)
+var_bay = var(t_bay)
+ate_bay
+sqrt(var_bay)
+```
+
+
+
+
+
+
+# SRE
+## Neyman
+```{r}
+data_00 = data[data$gender == 0 & data$year == 0, ]
+data_01 = data[data$gender == 0 & data$year == 1, ]
+data_10 = data[data$gender == 1 & data$year == 0, ]
+data_11 = data[data$gender == 1 & data$year == 1, ]
+
+y_00_t = data_00[data_00$Z == 1, ]$Y
+y_00_c = data_00[data_00$Z == 0, ]$Y
+ate_00_hat = mean(y_00_t) - mean(y_00_c)
+var_00_hat = var(y_00_t)/length(y_00_t) + var(y_00_c)/length(y_00_c)
+print("00")
+print(ate_00_hat)
+print(sqrt(var_00_hat))
+print(qnorm(0.975))
+
+y_01_t = data_01[data_01$Z == 1, ]$Y
+y_01_c = data_01[data_01$Z == 0, ]$Y
+ate_01_hat = mean(y_01_t) - mean(y_01_c)
+var_01_hat = var(y_01_t)/length(y_01_t) + var(y_01_c)/length(y_01_c)
+print("01")
+print(ate_01_hat)
+print(sqrt(var_01_hat))
+print(qnorm(0.975))
+
+y_10_t = data_10[data_10$Z == 1, ]$Y
+y_10_c = data_10[data_10$Z == 0, ]$Y
+ate_10_hat = mean(y_10_t) - mean(y_10_c)
+var_10_hat = var(y_10_t)/length(y_10_t) + var(y_10_c)/length(y_10_c)
+print("10")
+print(ate_10_hat)
+print(sqrt(var_10_hat))
+print(qnorm(0.975))
+
+y_11_t = data_11[data_11$Z == 1, ]$Y
+y_11_c = data_11[data_11$Z == 0, ]$Y
+ate_11_hat = mean(y_11_t) - mean(y_11_c)
+var_11_hat = var(y_11_t)/length(y_11_t) + var(y_11_c)/length(y_11_c)
+print("10")
+print(ate_11_hat)
+print(sqrt(var_11_hat))
+print(qnorm(0.975))
+
+ate_hat = (length(y_00_c) + length(y_00_t))/(length(data$Y)) *ate_00_hat + (length(y_01_c)  + length(y_01_t))/(length(data$Y)) *ate_01_hat + (length(y_10_c) + length(y_10_t))/(length(data$Y)) *ate_10_hat + (length(y_11_c) + length(y_11_t))/(length(data$Y)) *ate_11_hat
+var_ate = ((length(y_00_c) + length(y_00_t))/(length(data$Y)))^2 *var_00_hat + ((length(y_01_c) + length(y_01_t))/(length(data$Y)))^2 *var_01_hat + ((length(y_10_c) + length(y_10_t))/(length(data$Y)))^2 *var_10_hat + ((length(y_11_c) + length(y_11_t))/(length(data$Y)))^2 *var_11_hat
+
+print(ate_hat)
+print(sqrt(var_ate))
+```
+
+
+## Regression
+
+```{r}
+reg_sre1 = lm(Y ~ Z + s_hsgrade3, data = data_00)
+summary(reg_sre1)
+
+reg_sre2 = lm(Y ~ Z + s_hsgrade3, data = data_01)
+summary(reg_sre2)
+
+reg_sre3 = lm(Y ~ Z + s_hsgrade3, data = data_10)
+summary(reg_sre3)
+
+reg_sre4 = lm(Y ~ Z + s_hsgrade3, data = data_11)
+summary(reg_sre4)
+```
+
+
+```{r}
+(length(y_00_c) + length(y_00_t))/(length(data$Y)) *as.numeric(reg_sre1$coefficients["Z"]) + (length(y_01_c)  + length(y_01_t))/(length(data$Y)) *as.numeric(reg_sre2$coefficients["Z"]) + (length(y_10_c) + length(y_10_t))/(length(data$Y)) *as.numeric(reg_sre3$coefficients["Z"]) + (length(y_11_c) + length(y_11_t))/(length(data$Y)) *as.numeric(reg_sre4$coefficients["Z"])
+
+var_ate = ((length(y_00_c) + length(y_00_t))/(length(data$Y)))^2 *0.89379^2 + ((length(y_01_c) + length(y_01_t))/(length(data$Y)))^2 *0.90886^2 + ((length(y_10_c) + length(y_10_t))/(length(data$Y)))^2 *1.14662^2 + ((length(y_11_c) + length(y_11_t))/(length(data$Y)))^2 *1.17301^2
+
+print(sqrt(var_ate))
+```
+
+# Pairwise
+
+```{r}
+set.seed(42)
+pair1 = rep(0, length(data$Y))
+t_pair = rep(0, length(data$Y))
+j = 1
+
+for(i in 1: length(data$Y)){
+  pair_data = data[as.numeric(data[i, "s_hsgrade3"]) - 0.1 < data$s_hsgrade3 & data$s_hsgrade3 < as.numeric(data[i, "s_hsgrade3"]) + 0.1 & data$strata == as.numeric(data[i, "strata"]) & data$Z != as.numeric(data[i, "Z"]), ]
+  if(length(pair_data$Y) > 0){
+    randomPair = round(runif(1, 1, length(pair_data$Y)))
+    pair1[i] = as.numeric(pair_data[randomPair, "seq"])
+    if(as.numeric(data[i, "Z"]) == 1){
+      t_pair[j] = as.numeric(data[i, "Y"]) - as.numeric(pair_data[randomPair, "Y"])
+    }
+    else{
+      t_pair[j] = as.numeric(pair_data[randomPair, "Y"]) - as.numeric(data[i, "Y"])
+    }
+    j = j + 1
+  }
+}
+
+t_pair = t_pair[1: j - 1]
+ate_pair = mean(t_pair)
+var_pair = 1/((j - 1)) * var(t_pair) 
+
+```
+
+
+```{r}
+ate_pair
+sqrt(var_pair)
+```
+
+
+
+
+
+
+
+
+
+
+
+
